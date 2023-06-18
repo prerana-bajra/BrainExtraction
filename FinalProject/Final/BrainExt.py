@@ -4,6 +4,7 @@ import nibabel as nib
 import matplotlib.pyplot as plt
 import scipy.ndimage as ndi
 import cv2
+import os
 
 
 def view_img(img_path, label):
@@ -12,7 +13,7 @@ def view_img(img_path, label):
 
     # Get the image data and shape
     data = img.get_fdata()
-    view_data(data, label)
+    # view_data(data, label)
 
 
 def view_data(data, label):
@@ -76,10 +77,10 @@ def gauss_morph(sigma, radius_erosion, radius_dilation, data):
     threshold = filters.threshold_otsu(norm_data)
 
     mask = norm_data > threshold
-    view_data(mask, 'otsu')
+    # view_data(mask, 'otsu')
     # Apply morphological operations to remove non-brain tissue
     mask = morphology.erosion(mask, morphology.ball(radius_erosion))
-    view_data(mask, 'erosion')
+    # view_data(mask, 'erosion')
 
     # mask = morphology.dilation(mask, morphology.ball(radius_dilation))
     # view_data(mask, 'dilation')
@@ -96,7 +97,7 @@ def llc(sigma, radius_erosion, radius_dilation, data):
     smooth_data = data
     # Apply intensity normalization
     norm_data = (smooth_data - np.min(smooth_data)) / (np.max(smooth_data) - np.min(smooth_data))
-    view_data(norm_data, 'norm')
+    # view_data(norm_data, 'norm')
 
     # Threshold the image to extract brain tissue
     threshold = filters.threshold_otsu(norm_data)
@@ -105,7 +106,7 @@ def llc(sigma, radius_erosion, radius_dilation, data):
     mask = norm_data > threshold
     mask = morphology.erosion(mask, morphology.ball(radius_erosion))
 
-    view_data(mask, 'After erosion mask')
+    # view_data(mask, 'After erosion mask')
 
     # Label the connected components in the mask
     labeled_data, label = ndi.label(mask)
@@ -120,39 +121,65 @@ def llc(sigma, radius_erosion, radius_dilation, data):
     print(largest_label)
     # Create a binary mask that includes only the voxels belonging to the largest component
     largest_mask = (labeled_data == largest_label)
-    view_data(largest_mask, 'largest_mask')
+    # view_data(largest_mask, 'largest_mask')
 
     largest_mask = morphology.dilation(largest_mask, morphology.ball(radius_dilation))
-    view_data(largest_mask, 'dilation largest_mask')
+    # view_data(largest_mask, 'dilation largest_mask')
     largest_mask = morphology.dilation(largest_mask, morphology.ball(radius_dilation))
-    view_data(largest_mask, 'dilation largest_mask')
+    # view_data(largest_mask, 'dilation largest_mask')
     return largest_mask
 
 
-def first():
-    input_file = 'images/sub-01_ses-forrestgump_anat_sub-01_ses-forrestgump_T2w.nii.gz'
-    img, img_data = load_nifti(input_file)
-    data = cv2.normalize(img_data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-    view_img(input_file, 'Input')
+def brain_ext(input_dir, output_dir):
+    # Get a list of NIfTI files in the input directory
+    file_list = [file for file in os.listdir(input_dir) if file.endswith('.nii.gz')]
+    print(file_list)
 
-    mask_1 = gauss_morph(3, 3, 3, data)
-    brain_data = mask_1 * data
-    nib.save(nib.Nifti1Image(brain_data, img.affine), 'preprocessed_t2_image.nii.gz')
-    view_img('preprocessed_t2_image.nii.gz', '1st')
+    i = 0
+    # Loop through the file list
+    for file_name in file_list:
+        # Load the NIfTI file
+        file_path = os.path.join(input_dir, file_name)
 
+        # first(file_path)
+        # second()
 
-def second():
-    input_file = 'preprocessed_t2_image.nii.gz'
-    img, img_data = load_nifti(input_file)
-    data = cv2.normalize(img_data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-    largest_mask = llc(5, 5, 5, data)
-    segmented_data = data.copy()
-    segmented_data[~largest_mask] = 0
-    view_data(segmented_data, 'segmented')
-    nib.save(nib.Nifti1Image(segmented_data, img.affine), 't2_image_no_eyes.nii.gz')
+        img, img_data = load_nifti(file_path)
+        data = cv2.normalize(img_data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+        # view_img(file_path, 'Input')
+        mask_1 = gauss_morph(3, 3, 3, data)
+        brain_data = mask_1 * data
+
+        largest_mask = llc(5, 5, 5, brain_data)
+        segmented_data = brain_data.copy()
+        segmented_data[~largest_mask] = 0
+        # view_data(segmented_data, 'segmented')
+
+        # Create a new NIfTI image with the processed data
+        processed_img = nib.Nifti1Image(segmented_data, img.affine, img.header)
+
+        # Save the processed NIfTI image to the output directory
+        output_path = os.path.join(output_dir, "segmented_" + file_name)
+        print(output_path)
+        nib.save(processed_img, output_path)
+
+        i += 1
+        print("done: - ", i)
 
 
 if __name__ == '__main__':
-    first()
-    second()
+    # # Directory containing the NIfTI files
+    # input_dir = 'Dataset/ds000113-download/T2'
+    #
+    # # Directory to save the processed files
+    # output_dir = 'Output/'
+
+    # Directory containing the NIfTI files
+    input_dir = 'Dataset/ds000113-download/T1'
+
+    # Directory to save the processed files
+    output_dir = 'Output/T1/'
+
+    brain_ext(input_dir, output_dir)
+
 
